@@ -1,0 +1,52 @@
+name: Check Patches Against Latest Release
+
+on:
+  schedule:
+    - cron: "0 8 * * *"
+  workflow_dispatch:
+
+jobs:
+  check-patches:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "20"
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.x"
+
+      - name: Fetch latest Claude Code
+        run: |
+          npm pack @anthropic-ai/claude-code@latest
+          mkdir -p test-pkg
+          tar -xzf anthropic-ai-claude-code-*.tgz -C test-pkg --strip-components=1
+          head -5 test-pkg/cli.js
+
+      - name: Extract patcher from install.sh
+        run: |
+          sed -n '/^cat > .*patch\.py.*<< .PATCHER_EOF/,/^PATCHER_EOF/p' scripts/install.sh | tail -n +2 | head -n -1 > patch.py
+          head -5 patch.py
+
+      - name: Run patcher
+        run: python3 patch.py test-pkg/cli.js test-pkg/cli-patched.js
+
+      - name: Create issue on failure
+        if: failure()
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        with:
+          script: |
+            const version = require('child_process')
+              .execSync('head -5 test-pkg/cli.js')
+              .toString()
+              .match(/Version: ([\d.]+)/)?.[1] || 'unknown';
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `Patch failure on Claude Code v${version}`,
+              body: `The daily patch check failed against \`@anthropic-ai/claude-code@${version}\`.\n\nOne or more patch patterns no longer match. Review and update the patcher in \`scripts/install.sh\`.\n\nWorkflow run: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+              labels: ['patch-failure']
+            });
