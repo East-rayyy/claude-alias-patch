@@ -85,7 +85,7 @@ Restores your original Claude Code binary and removes the cache.
 
 ## What it patches
 
-6 locations in Claude Code's `cli.js`, all using content-based pattern matching:
+6 locations in Claude Code's `cli.js`. Patches 1–5 use literal string matching; Patch 6 uses regex to handle obfuscated function names that change between builds:
 
 | #   | What                    | Why                                                                   |
 | --- | ----------------------- | --------------------------------------------------------------------- |

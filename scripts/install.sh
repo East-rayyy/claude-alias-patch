@@ -247,18 +247,46 @@ def main():
     )
 
     # --- PATCH 6: Alias resolver fallback ---
-    # The built-in alias lists (e36, vF9) are built from process.env at module init,
-    # before settings.json env vars are loaded. Custom aliases miss the zc() guard
+    # The built-in alias lists are built from process.env at module init,
+    # before settings.json env vars are loaded. Custom aliases miss the guard
     # and skip the resolver switch entirely. This adds a fallback env var lookup
     # AFTER the switch block so custom aliases always resolve correctly.
-    apply_patch(
-        "Patch 6: Alias resolver fallback",
-        'if(QA()==="firstParty"&&e_z(z)&&IS1())',
-        'var _fev="ANTHROPIC_DEFAULT_"+z.toUpperCase().replace(/-/g,"_")+"_MODEL";'
-        'if(process.env[_fev])return process.env[_fev]/*ccpatch:fallback-resolver*/;'
-        'if(QA()==="firstParty"&&e_z(z)&&IS1())',
-        skip_marker='/*ccpatch:fallback-resolver*/',
-    )
+    # Uses regex because the obfuscated function names change every build.
+    if '/*ccpatch:fallback-resolver*/' in content:
+        print("  SKIP Patch 6: Alias resolver fallback (already patched)")
+    else:
+        p6_match = re.search(
+            r'(default:\})(if\(\w+\(\)==="firstParty"&&\w+\(\w+\)&&\w+\(\)\))',
+            content
+        )
+        if not p6_match:
+            print("  FAIL Patch 6: Alias resolver fallback — pattern not found")
+            fail_count += 1
+        elif content.count(p6_match.group(0)) > 1:
+            print(f"  FAIL Patch 6: Alias resolver fallback — pattern found {content.count(p6_match.group(0))} times (expected 1)")
+            fail_count += 1
+        else:
+            p6_original = p6_match.group(0)
+            p6_firstparty = p6_match.group(2)
+            p6_replacement = (
+                p6_match.group(1)
+                + 'var _fev="ANTHROPIC_DEFAULT_"+z.toUpperCase().replace(/-/g,"_")+"_MODEL";'
+                + 'if(process.env[_fev])return process.env[_fev]/*ccpatch:fallback-resolver*/;'
+                + p6_firstparty
+            )
+            old_len = len(content)
+            content = content.replace(p6_original, p6_replacement, 1)
+            new_len = len(content)
+            expected_diff = len(p6_replacement) - len(p6_original)
+            if new_len - old_len != expected_diff:
+                print(f"  FAIL Patch 6: Alias resolver fallback — size change mismatch")
+                fail_count += 1
+            elif p6_replacement not in content:
+                print(f"  FAIL Patch 6: Alias resolver fallback — replacement text not found after patching")
+                fail_count += 1
+            else:
+                print(f"  OK   Patch 6: Alias resolver fallback")
+                patch_count += 1
 
     print()
     print(f"=== Results ===")
@@ -326,6 +354,28 @@ if ! python3 "$CACHE_DIR/patch.py" "$CACHE_DIR/cli.js" "$CACHE_DIR/cli.js"; then
 fi
 
 echo "$VERSION" > "$CACHE_DIR/.version"
+
+# --- Detect existing installation ---
+echo ""
+CLAUDE_PATH=$(which claude 2>/dev/null || echo "")
+if [[ -n "$CLAUDE_PATH" ]]; then
+    if grep -q 'claude-alias-patch' "$CLAUDE_PATH" 2>/dev/null; then
+        echo "  Detected: existing wrapper (updating)"
+    elif [[ -L "$CLAUDE_PATH" ]]; then
+        REAL=$(readlink -f "$CLAUDE_PATH")
+        if file "$REAL" 2>/dev/null | grep -qE 'ELF|Mach-O'; then
+            echo "  Detected: native binary (via symlink → $REAL)"
+            echo "  The binary will be backed up. The patched version runs from npm via node."
+        fi
+    elif file "$CLAUDE_PATH" 2>/dev/null | grep -qE 'ELF|Mach-O'; then
+        echo "  Detected: native binary ($CLAUDE_PATH)"
+        echo "  The binary will be backed up. The patched version runs from npm via node."
+    else
+        echo "  Detected: existing npm installation"
+    fi
+else
+    echo "  No existing Claude Code installation found"
+fi
 
 # --- Install wrapper ---
 echo ""

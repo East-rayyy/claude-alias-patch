@@ -16,7 +16,11 @@ echo ""
 if [[ -e "$BACKUP_PATH" ]]; then
     rm -f "$BIN_PATH" 2>/dev/null || true
     mv "$BACKUP_PATH" "$BIN_PATH"
-    echo "  Restored original: $BIN_PATH"
+    if [[ -L "$BIN_PATH" ]]; then
+        echo "  Restored original symlink: $BIN_PATH → $(readlink -f "$BIN_PATH")"
+    else
+        echo "  Restored original: $BIN_PATH"
+    fi
 elif [[ -e "$BIN_PATH" ]] && grep -q 'claude-alias-patch' "$BIN_PATH" 2>/dev/null; then
     rm "$BIN_PATH"
     echo "  Removed wrapper: $BIN_PATH"
