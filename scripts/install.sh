@@ -256,7 +256,7 @@ def main():
         print("  SKIP Patch 6: Alias resolver fallback (already patched)")
     else:
         p6_match = re.search(
-            r'(default:\})(if\(\w+\(\)==="firstParty"&&\w+\(\w+\)&&\w+\(\)\))',
+            r'(default:\})(if\([\w$]+\(\)==="firstParty"&&[\w$]+\([\w$]+\)&&[\w$]+\(\)\))',
             content
         )
         if not p6_match:
