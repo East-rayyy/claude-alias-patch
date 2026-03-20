@@ -15,7 +15,7 @@ For example, setting `ANTHROPIC_DEFAULT_GEMINI_MODEL` registers `gemini` as a mo
 ## Install
 
 ```bash
-curl -sL https://raw.githubusercontent.com/East-rayyy/claude-alias-patch/main/linux-apply.sh | bash
+curl -fsSL https://raw.githubusercontent.com/East-rayyy/claude-alias-patch/main/linux-apply.sh | bash
 ```
 
 Prerequisites: Node.js >= 18, npm, python3.
@@ -51,12 +51,12 @@ Restart Claude Code after changing your env vars. Your custom aliases show up au
 claude update
 ```
 
-The wrapper intercepts the update command, fetches the latest Claude Code from npm, re-patches it, and reports the version.
+The wrapper intercepts the update command, pulls the latest patcher from GitHub, fetches the latest Claude Code from npm, re-patches it, and self-updates the wrapper script. Everything stays current automatically.
 
 ## Uninstall
 
 ```bash
-curl -sL https://raw.githubusercontent.com/East-rayyy/claude-alias-patch/main/linux-remove.sh | bash
+curl -fsSL https://raw.githubusercontent.com/East-rayyy/claude-alias-patch/main/linux-remove.sh | bash
 ```
 
 Restores your original Claude Code binary and removes the cache.

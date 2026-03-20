@@ -35,26 +35,33 @@ The installer detects the user's existing Claude Code installation type via `det
 
 All paths converge on the same approach: fetch cli.js from npm, patch it, run via `exec node cli.js` through the wrapper.
 
+## Wrapper Behavior
+
+- **Update flow**: `claude update` → wrapper intercepts → downloads latest patcher + wrapper from GitHub repo (self-update) → fetches latest Claude Code from npm → re-patches → reports version. Uses flock for concurrency safety. Patcher/wrapper download failures are non-fatal (falls back to cached copies).
+- **Normal run**: checks for `ccpatch:model-enum` marker in cli.js — if missing, auto re-patches before exec.
+- **Environment**: sets `DISABLE_AUTO_MIGRATE_TO_NATIVE=1` to prevent Claude from overwriting the wrapper. Unsets `CLAUDECODE`, `CLAUDE_CODE_ENTRYPOINT`, and `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` to prevent session env leakage.
+- **No settings.json modification**: the patch never modifies `~/.claude/settings.json`. It only reads env vars that the user has configured there.
+
 ## Patcher Architecture
 
 The patcher (`lib/patcher.py`) applies 6 patches to Claude Code's `cli.js`:
 
-1. **Zod enum → string** — Task tool accepts any model alias string
-2. **Env var whitelist** — monkey-patches `Set.has()` to accept `ANTHROPIC_DEFAULT_*_MODEL` vars
-3. **Model picker fallback** — appends custom aliases to the catch-all fallback list
-4. **Tool description** — dynamically lists available aliases in the Task tool's describe text
-5. **Model picker UI** — adds custom models to the dropdown with their resolved model ID
-6. **Alias resolver fallback** — regex-based (function names are obfuscated), adds env var lookup after the switch block
-
-Patches 1–5 use literal string matching. Patch 6 uses regex because the target function names change between builds. All patches are idempotent — re-running shows `SKIP` for already-patched locations.
+1. **Zod enum → string** — Task tool accepts any model alias string (regex to find Zod variable name, then literal replacement)
+2. **Env var whitelist** — monkey-patches `Set.has()` to accept `ANTHROPIC_DEFAULT_*_MODEL` vars (regex to find Set variable name, then literal replacement)
+3. **Model picker fallback** — appends custom aliases to the catch-all fallback list (literal matching)
+4. **Tool description** — dynamically lists available aliases in the Task tool's describe text (literal matching)
+5. **Model picker UI** — adds custom models to the dropdown with their resolved model ID (literal matching)
+6. **Alias resolver fallback** — adds env var lookup after the switch block (fully regex-based — function names are obfuscated and change every build)
 
 Each patch uses `/*ccpatch:<name>*/` comment markers for idempotency detection.
 
-The `SCAN` constant is the env var scanner snippet reused across patches 3, 4, and 5 — it extracts alias names from `process.env`.
+The `apply_patch()` function handles: uniqueness check (pattern must appear exactly once), size verification, and idempotency via skip markers. Patch 6 inlines its own equivalent of `apply_patch()` because it's fully regex-based.
+
+The `SCAN` constant is the env var scanner snippet reused across patches 3, 4, and 5 — it extracts alias names from `process.env` and excludes built-in aliases (`sonnet`, `opus`, `haiku`, `best`, `sonnet[1m]`, `opus[1m]`, `opusplan`).
 
 ## Testing Changes
 
-There are no unit tests. Verify patches manually:
+No unit tests. Verify patches manually:
 
 ```bash
 # Fetch latest Claude Code
@@ -69,7 +76,17 @@ python3 lib/patcher.py /tmp/test-pkg/cli.js /tmp/test-pkg/cli-patched.js
 python3 lib/patcher.py /tmp/test-pkg/cli-patched.js /tmp/test-pkg/cli-patched2.js
 ```
 
-Shell script syntax check: `bash -n linux-apply.sh && bash -n linux-remove.sh && bash -n lib/wrapper.sh`
+Shell script syntax check:
+
+```bash
+bash -n linux-apply.sh && bash -n linux-remove.sh && bash -n lib/wrapper.sh
+```
+
+Python syntax check:
+
+```bash
+python3 -c "compile(open('lib/patcher.py').read(), 'lib/patcher.py', 'exec')"
+```
 
 ## CI
 
@@ -81,16 +98,17 @@ Shell script syntax check: `bash -n linux-apply.sh && bash -n linux-remove.sh &&
 When modifying patches:
 
 1. Edit `lib/patcher.py` directly
-2. The `apply_patch()` function handles: uniqueness check (pattern must appear exactly once), size verification, idempotency via skip markers
-3. For regex-based patches (Patch 6), the manual equivalent of `apply_patch()` is inlined
-4. When Claude Code updates change obfuscated variable names, only the regex patterns need updating — not the replacement logic
-5. Literal patches break when Anthropic changes the matched strings in `cli.js`
+2. Patches 1–2 use regex to extract obfuscated variable names, then apply literal replacements using those names. Patches 3–5 are purely literal. Patch 6 is fully regex-based.
+3. When Claude Code updates change obfuscated variable names, regex-based patches auto-adapt. Literal patches break when Anthropic changes the matched strings in `cli.js`.
+4. If adding a new patch, follow the `apply_patch()` pattern: unique match, size verification, `/*ccpatch:<name>*/` marker for idempotency.
+5. The `SCAN` constant's exclude list must stay in sync with Claude Code's built-in aliases.
 
 ## PR Checklist
 
 From the PR template — all must pass before merging:
 
-- All 6 patches pass against the latest Claude Code release
+- All patches pass against the latest Claude Code release
 - Patcher is idempotent (second run shows all SKIP)
 - Shell scripts pass `bash -n` syntax check
+- Python patcher passes syntax compilation check
 - No external dependencies added

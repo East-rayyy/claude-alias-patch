@@ -2,8 +2,8 @@
 # Claude Alias Patch — Linux installer
 # Adds custom model alias support to Claude Code.
 #
-# Apply:  curl -sL https://raw.githubusercontent.com/East-rayyy/claude-alias-patch/main/linux-apply.sh | bash
-# Remove: curl -sL https://raw.githubusercontent.com/East-rayyy/claude-alias-patch/main/linux-remove.sh | bash
+# Apply:  curl -fsSL https://raw.githubusercontent.com/East-rayyy/claude-alias-patch/main/linux-apply.sh | bash
+# Remove: curl -fsSL https://raw.githubusercontent.com/East-rayyy/claude-alias-patch/main/linux-remove.sh | bash
 #
 set -euo pipefail
 
@@ -29,6 +29,7 @@ check_prereq() {
 check_prereq node
 check_prereq npm
 check_prereq python3
+check_prereq curl
 
 NODE_MAJOR=$(node -e "process.stdout.write(String(process.versions.node.split('.')[0]))")
 if [[ "$NODE_MAJOR" -lt 18 ]]; then
@@ -47,7 +48,7 @@ fi
 # --- Download patcher ---
 mkdir -p "$CACHE_DIR"
 
-if ! curl -sL "$REPO_BASE/lib/patcher.py" -o "$CACHE_DIR/patch.py" 2>/dev/null; then
+if ! curl -fsSL "$REPO_BASE/lib/patcher.py" -o "$CACHE_DIR/patch.py"; then
     echo "ERROR: Failed to download patcher" >&2
     exit 1
 fi
@@ -58,16 +59,16 @@ echo "  Patcher downloaded to $CACHE_DIR/patch.py"
 echo ""
 echo "  Fetching @anthropic-ai/claude-code from npm..."
 
-TMPDIR=$(mktemp -d)
-cleanup_tmpdir() { rm -rf "$TMPDIR"; }
-trap cleanup_tmpdir EXIT
+WORK_DIR=$(mktemp -d)
+cleanup_work_dir() { rm -rf "$WORK_DIR"; }
+trap cleanup_work_dir EXIT
 
-if ! npm pack @anthropic-ai/claude-code@latest --pack-destination "$TMPDIR" >/dev/null 2>&1; then
+if ! npm pack @anthropic-ai/claude-code@latest --pack-destination "$WORK_DIR" >/dev/null 2>&1; then
     echo "ERROR: Failed to fetch @anthropic-ai/claude-code from npm" >&2
     exit 1
 fi
 
-TGZ=$(ls "$TMPDIR"/*.tgz 2>/dev/null | head -1)
+TGZ=$(ls "$WORK_DIR"/*.tgz 2>/dev/null | head -1)
 if [[ -z "$TGZ" ]]; then
     echo "ERROR: npm pack produced no output" >&2
     exit 1
@@ -168,7 +169,7 @@ echo "  Installing wrapper..."
 mkdir -p "$BIN_DIR"
 
 # Download wrapper script
-if ! curl -sL "$REPO_BASE/lib/wrapper.sh" -o "$CACHE_DIR/claude-wrapper.sh" 2>/dev/null; then
+if ! curl -fsSL "$REPO_BASE/lib/wrapper.sh" -o "$CACHE_DIR/claude-wrapper.sh"; then
     echo "ERROR: Failed to download wrapper script" >&2
     exit 1
 fi
@@ -194,7 +195,7 @@ cp "$CACHE_DIR/claude-wrapper.sh" "$BIN_PATH"
 chmod +x "$BIN_PATH"
 
 # Verify PATH
-RESOLVED=$(which claude 2>/dev/null || echo "")
+RESOLVED=$(command -v claude 2>/dev/null || echo "")
 if [[ "$RESOLVED" != "$BIN_PATH" && -n "$RESOLVED" ]]; then
     echo ""
     echo "  WARNING: 'claude' resolves to $RESOLVED instead of $BIN_PATH"
@@ -219,4 +220,4 @@ echo '    }'
 echo ""
 echo "  Then restart Claude Code. Your custom aliases will appear automatically."
 echo "  Update: claude update"
-echo "  Remove: curl -sL $REPO_BASE/linux-remove.sh | bash"
+echo "  Remove: curl -fsSL $REPO_BASE/linux-remove.sh | bash"
