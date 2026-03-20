@@ -108,10 +108,16 @@ fi
 # Prevent Claude from auto-migrating to native binary (would overwrite this wrapper)
 export DISABLE_AUTO_MIGRATE_TO_NATIVE=1
 
+# Enable agent teams
+export CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1
+
 # Strip parent session env vars to prevent interference when running
-# claude from within an existing Claude Code session
+# claude from within an existing Claude Code session.
+# CLAUDECODE=1 is set by Claude when spawning child processes — leaking it
+# into a fresh session makes it think it's already a subprocess.
+# CLAUDE_CODE_ENTRYPOINT is auto-detected at startup (cli, mcp, sdk-*, etc.) —
+# a parent session's value would override the fresh detection.
 unset CLAUDECODE 2>/dev/null || true
 unset CLAUDE_CODE_ENTRYPOINT 2>/dev/null || true
-unset CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS 2>/dev/null || true
 
 exec node "$CLI_JS" "$@"

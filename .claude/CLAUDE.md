@@ -39,7 +39,7 @@ All paths converge on the same approach: fetch cli.js from npm, patch it, run vi
 
 - **Update flow**: `claude update` → wrapper intercepts → downloads latest patcher + wrapper from GitHub repo (self-update) → fetches latest Claude Code from npm → re-patches → reports version. Uses flock for concurrency safety. Patcher/wrapper download failures are non-fatal (falls back to cached copies).
 - **Normal run**: checks for `ccpatch:model-enum` marker in cli.js — if missing, auto re-patches before exec.
-- **Environment**: sets `DISABLE_AUTO_MIGRATE_TO_NATIVE=1` to prevent Claude from overwriting the wrapper. Unsets `CLAUDECODE`, `CLAUDE_CODE_ENTRYPOINT`, and `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` to prevent session env leakage.
+- **Environment**: sets `DISABLE_AUTO_MIGRATE_TO_NATIVE=1` to prevent Claude from overwriting the wrapper. Exports `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` to enable agent teams. Unsets `CLAUDECODE` (child process marker) and `CLAUDE_CODE_ENTRYPOINT` (auto-detected at startup) to prevent parent session leakage into nested sessions.
 - **No settings.json modification**: the patch never modifies `~/.claude/settings.json`. It only reads env vars that the user has configured there.
 
 ## Patcher Architecture
