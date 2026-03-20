@@ -1,4 +1,5 @@
 name: Check Patches (PR)
+run-name: "Check patches — PR #${{ github.event.pull_request.number }}"
 
 on:
   pull_request:

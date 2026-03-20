@@ -1,12 +1,15 @@
-name: Check Patches Against Latest Release
+name: Check Patches
+run-name: "Check patches — claude-code@latest"
 
 on:
   schedule:
     - cron: "0 8 * * *"
+  push:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
   issues: write
 
 jobs:
@@ -14,6 +17,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4
+        with:
+          fetch-tags: true
+          fetch-depth: 0
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
@@ -24,14 +30,34 @@ jobs:
           python-version: "3.x"
 
       - name: Fetch latest Claude Code
+        id: fetch
         run: |
           npm pack @anthropic-ai/claude-code@latest
           mkdir -p test-pkg
           tar -xzf anthropic-ai-claude-code-*.tgz -C test-pkg --strip-components=1
-          head -5 test-pkg/cli.js
+          VERSION=$(head -5 test-pkg/cli.js | grep -oP '// Version: \K[\d.]+' || echo "unknown")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Claude Code version: $VERSION"
 
       - name: Run patcher
         run: python3 lib/patcher.py test-pkg/cli.js test-pkg/cli-patched.js
+
+      - name: Tag version on success
+        if: success()
+        run: |
+          VERSION="${{ steps.fetch.outputs.version }}"
+          TAG="v${VERSION}"
+          if [ "$VERSION" = "unknown" ]; then
+            echo "Could not determine version — skipping tag"
+            exit 0
+          fi
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "Tag $TAG already exists — skipping"
+          else
+            git tag "$TAG"
+            git push origin "$TAG"
+            echo "Created tag $TAG"
+          fi
 
       - name: Create issue on failure
         if: failure()
