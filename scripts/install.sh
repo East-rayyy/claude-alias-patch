@@ -356,26 +356,77 @@ fi
 echo "$VERSION" > "$CACHE_DIR/.version"
 
 # --- Detect existing installation ---
-echo ""
-CLAUDE_PATH=$(which claude 2>/dev/null || echo "")
-if [[ -n "$CLAUDE_PATH" ]]; then
-    if grep -q 'claude-alias-patch' "$CLAUDE_PATH" 2>/dev/null; then
-        echo "  Detected: existing wrapper (updating)"
-    elif [[ -L "$CLAUDE_PATH" ]]; then
-        REAL=$(readlink -f "$CLAUDE_PATH")
-        if file "$REAL" 2>/dev/null | grep -qE 'ELF|Mach-O'; then
-            echo "  Detected: native binary (via symlink → $REAL)"
-            echo "  The binary will be backed up. The patched version runs from npm via node."
-        fi
-    elif file "$CLAUDE_PATH" 2>/dev/null | grep -qE 'ELF|Mach-O'; then
-        echo "  Detected: native binary ($CLAUDE_PATH)"
-        echo "  The binary will be backed up. The patched version runs from npm via node."
-    else
-        echo "  Detected: existing npm installation"
+detect_claude_install() {
+    local claude_path
+    claude_path=$(command -v claude 2>/dev/null) || { echo "none"; return; }
+
+    # Already our wrapper
+    if grep -q 'claude-alias-patch' "$claude_path" 2>/dev/null; then
+        echo "wrapper"; return
     fi
-else
-    echo "  No existing Claude Code installation found"
-fi
+
+    # Resolve symlinks to check the real binary
+    local resolved
+    resolved=$(readlink -f "$claude_path" 2>/dev/null) || resolved="$claude_path"
+
+    # ELF or Mach-O binary
+    if file "$resolved" 2>/dev/null | grep -qE 'ELF|Mach-O'; then
+        if [[ "$resolved" == *"/.local/share/claude/versions/"* ]]; then
+            echo "native"
+        else
+            echo "package-manager"
+        fi
+        return
+    fi
+
+    # npm global — symlink to cli.js
+    if [[ "$resolved" == *"/node_modules/@anthropic-ai/claude-code/cli.js" ]]; then
+        echo "npm-global"; return
+    fi
+
+    # npm local install
+    if [[ "$resolved" == *"/.claude/local/"* ]]; then
+        echo "npm-local"; return
+    fi
+
+    echo "unknown"
+}
+
+echo ""
+INSTALL_TYPE=$(detect_claude_install)
+CLAUDE_PATH=$(command -v claude 2>/dev/null || echo "")
+
+case "$INSTALL_TYPE" in
+    wrapper)
+        echo "  Detected: existing wrapper (upgrading)"
+        ;;
+    native)
+        RESOLVED=$(readlink -f "$CLAUDE_PATH" 2>/dev/null || echo "$CLAUDE_PATH")
+        echo "  Detected: native binary ($RESOLVED)"
+        echo ""
+        echo "  Native binaries embed cli.js — they cannot be patched directly."
+        echo "  The wrapper runs a patched copy from npm via node instead."
+        echo "  Your native binary will be backed up to $BACKUP_PATH"
+        ;;
+    package-manager)
+        RESOLVED=$(readlink -f "$CLAUDE_PATH" 2>/dev/null || echo "$CLAUDE_PATH")
+        echo "  Detected: package-manager binary ($RESOLVED)"
+        echo ""
+        echo "  Package-manager binaries cannot be patched directly."
+        echo "  The wrapper runs a patched copy from npm via node instead."
+        echo "  Your binary will be backed up to $BACKUP_PATH"
+        ;;
+    npm-global|npm-local)
+        echo "  Detected: npm installation ($CLAUDE_PATH)"
+        ;;
+    none)
+        echo "  No existing Claude Code installation found"
+        ;;
+    unknown)
+        echo "  Detected: unknown installation type ($CLAUDE_PATH)"
+        echo "  The wrapper will be installed alongside it."
+        ;;
+esac
 
 # --- Install wrapper ---
 echo ""

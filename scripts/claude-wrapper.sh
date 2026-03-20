@@ -82,4 +82,10 @@ fi
 # Prevent Claude from auto-migrating to native binary (would overwrite this wrapper)
 export DISABLE_AUTO_MIGRATE_TO_NATIVE=1
 
+# Strip parent session env vars to prevent interference when running
+# claude from within an existing Claude Code session
+unset CLAUDECODE 2>/dev/null || true
+unset CLAUDE_CODE_ENTRYPOINT 2>/dev/null || true
+unset CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS 2>/dev/null || true
+
 exec node "$CLI_JS" "$@"
