@@ -14,11 +14,35 @@ echo ""
 
 # Restore backup
 if [[ -e "$BACKUP_PATH" ]]; then
-    rm -f "$BIN_PATH" 2>/dev/null || true
-    mv "$BACKUP_PATH" "$BIN_PATH"
-    if [[ -L "$BIN_PATH" ]]; then
-        echo "  Restored original symlink: $BIN_PATH → $(readlink -f "$BIN_PATH")"
+    # Check if backup symlink target still exists (native binary may have self-updated)
+    if [[ -L "$BACKUP_PATH" ]]; then
+        BACKUP_TARGET=$(readlink "$BACKUP_PATH")
+        if [[ ! -e "$BACKUP_TARGET" ]]; then
+            echo "  Backup target no longer exists: $BACKUP_TARGET"
+            # Native binary auto-updated and cleaned up old version — find latest
+            LATEST=$(ls -t "$HOME/.local/share/claude/versions/" 2>/dev/null | head -1)
+            if [[ -n "$LATEST" ]]; then
+                rm -f "$BIN_PATH" "$BACKUP_PATH" 2>/dev/null || true
+                ln -s "$HOME/.local/share/claude/versions/$LATEST" "$BIN_PATH"
+                echo "  Restored to latest native version: $LATEST"
+            else
+                rm -f "$BIN_PATH" "$BACKUP_PATH" 2>/dev/null || true
+                echo "  Removed wrapper. No native binary found."
+                echo "  Reinstall Claude Code: https://docs.anthropic.com/en/docs/claude-code/getting-started"
+            fi
+        else
+            rm -f "$BIN_PATH" 2>/dev/null || true
+            mv "$BACKUP_PATH" "$BIN_PATH"
+            if [[ -L "$BIN_PATH" ]]; then
+                echo "  Restored original symlink: $BIN_PATH → $(readlink -f "$BIN_PATH")"
+            else
+                echo "  Restored original: $BIN_PATH"
+            fi
+        fi
     else
+        # Backup is a regular file — simple restore
+        rm -f "$BIN_PATH" 2>/dev/null || true
+        mv "$BACKUP_PATH" "$BIN_PATH"
         echo "  Restored original: $BIN_PATH"
     fi
 elif [[ -e "$BIN_PATH" ]] && grep -q 'claude-alias-patch' "$BIN_PATH" 2>/dev/null; then
