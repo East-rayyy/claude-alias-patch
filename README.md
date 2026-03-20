@@ -10,19 +10,17 @@ For example, setting `ANTHROPIC_DEFAULT_GEMINI_MODEL` registers `gemini` as a mo
 
 **If you don't set any custom env vars, the patch does nothing** — Claude Code works exactly like normal.
 
-**You'll need an API proxy** that accepts Anthropic-format API calls and routes them to the correct provider. I use [9router](https://github.com/decolua/9router), but [LiteLLM](https://github.com/BerriAI/litellm) and [OpenRouter](https://openrouter.ai/) work too.
+**You'll need an API proxy** that accepts Anthropic-format API calls and routes them to the correct provider. [LiteLLM](https://github.com/BerriAI/litellm), [OpenRouter](https://openrouter.ai/), and similar tools work.
 
 ## Install
 
 ```bash
-curl -sL https://raw.githubusercontent.com/East-rayyy/claude-alias-patch/main/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/East-rayyy/claude-alias-patch/main/linux-apply.sh | bash
 ```
 
 Prerequisites: Node.js >= 18, npm, python3.
 
-The installer downloads Claude Code from npm, patches it, backs up your existing `claude` binary, and installs a wrapper script. Works whether you originally installed Claude Code via npm or the native binary.
-
-All scripts live in the [`scripts/`](scripts/) folder.
+The installer downloads Claude Code from npm, patches it, backs up your existing `claude` binary, and installs a wrapper script. Works whether you originally installed Claude Code via npm, the native binary, or a package manager.
 
 ## Configure
 
@@ -45,27 +43,7 @@ The naming convention is `ANTHROPIC_DEFAULT_{ALIAS}_MODEL`. The alias comes from
 - `ANTHROPIC_DEFAULT_GPT_MODEL` → alias `gpt`
 - `ANTHROPIC_DEFAULT_DEEP_SEEK_MODEL` → alias `deep-seek` (underscores become hyphens)
 
-Restart Claude Code after changing your env vars. Your custom aliases show up automatically in the model picker, the Task tool, and agent definitions. No need to re-patch or rerun the installer — just edit and restart.
-
-## My setup
-
-I use [9router](https://github.com/decolua/9router) as my API proxy. Here's what my `settings.json` env looks like:
-
-```json
-{
-  "env": {
-    "ANTHROPIC_BASE_URL": "http://localhost:20128/v1",
-    "ANTHROPIC_DEFAULT_SONNET_MODEL": "claude-sonnet-4-6",
-    "ANTHROPIC_DEFAULT_OPUS_MODEL": "claude-opus-4-6",
-    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "claude-haiku-4-5",
-    "ANTHROPIC_DEFAULT_GEMINI_MODEL": "google-gemini-code",
-    "ANTHROPIC_DEFAULT_GPT_MODEL": "openai-gpt-codex",
-    "ANTHROPIC_DEFAULT_GLM_MODEL": "glm-glm-coding"
-  }
-}
-```
-
-This gives me `gemini`, `gpt`, and `glm` as extra model aliases. 9router handles routing each model ID to the correct provider.
+Restart Claude Code after changing your env vars. Your custom aliases show up automatically in the model picker, the Task tool, and agent definitions.
 
 ## Update
 
@@ -73,12 +51,12 @@ This gives me `gemini`, `gpt`, and `glm` as extra model aliases. 9router handles
 claude update
 ```
 
-The wrapper intercepts the update command, fetches the latest Claude Code from npm, re-patches it, and reports the version.
+The wrapper intercepts the update command, pulls the latest patcher from GitHub, fetches the latest Claude Code from npm, re-patches it, and self-updates the wrapper script. Everything stays current automatically.
 
 ## Uninstall
 
 ```bash
-curl -sL https://raw.githubusercontent.com/East-rayyy/claude-alias-patch/main/scripts/uninstall.sh | bash
+curl -fsSL https://raw.githubusercontent.com/East-rayyy/claude-alias-patch/main/linux-remove.sh | bash
 ```
 
 Restores your original Claude Code binary and removes the cache.
@@ -100,4 +78,4 @@ All patches are idempotent — running the patcher twice produces the same resul
 
 ---
 
-Enjoy! If you run into issues, open an issue or start a discussion.
+If you run into issues, open an issue or start a discussion.

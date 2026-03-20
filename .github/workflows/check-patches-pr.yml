@@ -28,10 +28,5 @@ jobs:
           tar -xzf anthropic-ai-claude-code-*.tgz -C test-pkg --strip-components=1
           head -5 test-pkg/cli.js
 
-      - name: Extract patcher from install.sh
-        run: |
-          sed -n '/^cat > .*patch\.py.*<< .PATCHER_EOF/,/^PATCHER_EOF/p' scripts/install.sh | tail -n +2 | head -n -1 > patch.py
-          head -5 patch.py
-
       - name: Run patcher
-        run: python3 patch.py test-pkg/cli.js test-pkg/cli-patched.js
+        run: python3 lib/patcher.py test-pkg/cli.js test-pkg/cli-patched.js
