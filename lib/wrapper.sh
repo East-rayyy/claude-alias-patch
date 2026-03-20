@@ -68,7 +68,7 @@ fi
 # --- Normal run ---
 if [[ ! -f "$CLI_JS" ]]; then
     echo "Claude Alias Patch: cli.js not found at $CLI_JS" >&2
-    echo "Run the installer: curl -sL https://raw.githubusercontent.com/East-rayyy/claude-alias-patch/main/scripts/install.sh | bash" >&2
+    echo "Run the installer: curl -sL https://raw.githubusercontent.com/East-rayyy/claude-alias-patch/main/linux-apply.sh | bash" >&2
     exit 1
 fi
 

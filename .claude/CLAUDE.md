@@ -8,14 +8,15 @@ Claude Alias Patch adds custom model aliases to Claude Code by patching its bund
 
 ## Repository Structure
 
-- `scripts/install.sh` — single-file installer. Contains the embedded Python patcher (heredoc) plus the bash installer logic (npm fetch, patching, wrapper install, backup)
-- `scripts/claude-wrapper.sh` — wrapper that replaces the `claude` binary. Handles `claude update` (re-fetch + re-patch) and normal execution (auto re-patch if markers missing, then `exec node cli.js`)
-- `scripts/uninstall.sh` — restores original binary from backup, removes cache
-- `comments-log.md` — log of GitHub comments posted to related issues across repos
+- `linux-apply.sh` — installer script (user-facing). Downloads patcher + wrapper from GitHub, fetches Claude Code from npm, patches it, installs wrapper.
+- `linux-remove.sh` — uninstaller (user-facing). Restores original binary from backup, removes cache.
+- `lib/patcher.py` — Python patcher. Applies 6 patches to `cli.js`.
+- `lib/wrapper.sh` — Bash wrapper that replaces the `claude` binary. Handles `claude update` (re-fetch + re-patch) and normal execution (auto re-patch if markers missing, then `exec node cli.js`).
+- `comments-log.md` — log of GitHub comments posted to related issues across repos.
 
 ## Key Paths at Runtime
 
-- `~/.cache/claude-alias-patch/` — cache dir: `cli.js` (patched), `patch.py` (extracted from install.sh), `.version`
+- `~/.cache/claude-alias-patch/` — cache dir: `cli.js` (patched), `patch.py` (downloaded from GitHub), `.version`
 - `~/.local/bin/claude` — wrapper script (replaces original binary)
 - `~/.local/bin/claude.bak` — backup of original binary (symlink for native, file for npm)
 
@@ -36,7 +37,7 @@ All paths converge on the same approach: fetch cli.js from npm, patch it, run vi
 
 ## Patcher Architecture
 
-The patcher (`patch.py`, embedded in `install.sh` lines 50–318) applies 6 patches to Claude Code's `cli.js`:
+The patcher (`lib/patcher.py`) applies 6 patches to Claude Code's `cli.js`:
 
 1. **Zod enum → string** — Task tool accepts any model alias string
 2. **Env var whitelist** — monkey-patches `Set.has()` to accept `ANTHROPIC_DEFAULT_*_MODEL` vars
@@ -49,42 +50,37 @@ Patches 1–5 use literal string matching. Patch 6 uses regex because the target
 
 Each patch uses `/*ccpatch:<name>*/` comment markers for idempotency detection.
 
-The `SCAN` constant (line 94–98) is the env var scanner snippet reused across patches 3, 4, and 5 — it extracts alias names from `process.env`.
+The `SCAN` constant is the env var scanner snippet reused across patches 3, 4, and 5 — it extracts alias names from `process.env`.
 
 ## Testing Changes
 
 There are no unit tests. Verify patches manually:
 
 ```bash
-# Extract patcher from install.sh
-sed -n '/^cat > .*patch\.py.*<< .PATCHER_EOF/,/^PATCHER_EOF/p' scripts/install.sh | tail -n +2 | head -n -1 > /tmp/patch.py
-
 # Fetch latest Claude Code
 npm pack @anthropic-ai/claude-code@latest
 mkdir -p /tmp/test-pkg
 tar -xzf anthropic-ai-claude-code-*.tgz -C /tmp/test-pkg --strip-components=1
 
 # Run patcher — all 6 should show OK (or SKIP if already patched)
-python3 /tmp/patch.py /tmp/test-pkg/cli.js /tmp/test-pkg/cli-patched.js
+python3 lib/patcher.py /tmp/test-pkg/cli.js /tmp/test-pkg/cli-patched.js
 
 # Verify idempotency — all 6 should show SKIP
-python3 /tmp/patch.py /tmp/test-pkg/cli-patched.js /tmp/test-pkg/cli-patched2.js
+python3 lib/patcher.py /tmp/test-pkg/cli-patched.js /tmp/test-pkg/cli-patched2.js
 ```
 
-Shell script syntax check: `bash -n scripts/install.sh`
+Shell script syntax check: `bash -n linux-apply.sh && bash -n linux-remove.sh && bash -n lib/wrapper.sh`
 
 ## CI
 
-- `check-patches.yml` — daily cron (08:00 UTC) + manual trigger. Fetches latest Claude Code from npm and runs the patcher. Auto-creates a GitHub issue with `patch-failure` label on failure.
+- `check-patches.yml` — daily cron (08:00 UTC) + manual trigger. Fetches latest Claude Code from npm and runs `lib/patcher.py`. Auto-creates a GitHub issue with `patch-failure` label on failure.
 - `check-patches-pr.yml` — runs on PRs to `main`. Same patcher check.
-
-Both workflows extract `patch.py` from the `install.sh` heredoc at CI time — the patcher is not a standalone file in the repo.
 
 ## Working on the Patcher
 
-The patcher is embedded inside `install.sh`. When modifying patches:
+When modifying patches:
 
-1. Edit the Python code inside the `PATCHER_EOF` heredoc in `scripts/install.sh`
+1. Edit `lib/patcher.py` directly
 2. The `apply_patch()` function handles: uniqueness check (pattern must appear exactly once), size verification, idempotency via skip markers
 3. For regex-based patches (Patch 6), the manual equivalent of `apply_patch()` is inlined
 4. When Claude Code updates change obfuscated variable names, only the regex patterns need updating — not the replacement logic
